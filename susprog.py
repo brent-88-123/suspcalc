@@ -93,7 +93,7 @@ def calculate_roll_center(upper, lower, cop):
 
     return roll_center, geometry_data
 
-def rotate_points(points, axis_point, rotation_axis, angle):
+def rotate_points(points, axis_point, rotation_axis, angle, height):
     """
     Rotate points around a given axis in 3D space.
 
@@ -106,11 +106,14 @@ def rotate_points(points, axis_point, rotation_axis, angle):
     Returns:
         np.array: Rotated points.
     """
+    
+    points = jounce_innerpoints(points, height)
+    
     # Normalize the rotation axis
     rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
     
     # Translate points to the rotation axis origin
-    translated_points = points - axis_point
+    translated_points = points[1:] - axis_point
     
     # Compute the rotation matrix using the Rodrigues' rotation formula
     K = np.array([[0, -rotation_axis[2], rotation_axis[1]],
@@ -122,7 +125,32 @@ def rotate_points(points, axis_point, rotation_axis, angle):
     
     # Apply rotation and translate back
     rotated_points = (R @ translated_points.T).T + axis_point
-    return rotated_points
+    
+    # Combine the unrotated first point with the rotated points
+    modified_points = np.vstack((points[0], rotated_points))
+    
+    return modified_points
+
+def jounce_innerpoints(points, height):
+
+    """
+    Move the inner points of the suspension system by teh prescribed distance
+    
+    Parameters:
+        points (np.array): 3x3 array of suspension joint locations
+        height (float): movement of the sprung mass (m)
+    
+    Returns:
+        np.array: moved inner points
+    
+    """
+    
+    inner_points_z = points[1:, 2:]
+    inner_points_z = inner_points_z + height
+    
+    points[1:,2:] = inner_points_z
+    
+    return points
 
 def solve_outer_position(points, target_lengths):
     """
