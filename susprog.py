@@ -189,3 +189,52 @@ def solve_outer_position(points, target_lengths):
         return result.x
     else:
         raise ValueError("Optimization failed:", result.message)
+
+def rotate_inner_points(points, axis_point, angle_deg):
+    """
+    Rotate points around X-axis through a given axis point.
+    
+    Parameters:
+        points: np.array of shape (N, 3)
+        axis_point: np.array of shape (3,) - point that rotation axis passes through
+        angle_deg: float - rotation angle in degrees
+    """
+    angle = np.radians(angle_deg)
+    
+    # Create basic X-rotation matrix
+    R = np.array([
+        [1, 0, 0],
+        [0, np.cos(angle), -np.sin(angle)],
+        [0, np.sin(angle), np.cos(angle)]
+    ])
+    
+    # Translate points to origin
+    centered_points = points - axis_point
+    
+    # Apply rotation
+    rotated_points = np.dot(centered_points, R.T)
+    
+    # Translate back
+    final_points = rotated_points + axis_point
+    
+    return final_points
+
+def trail_calc(upper_points, lower_points, cop):
+    
+    # Import the outer joint points of the suspension system
+    
+    # Lower outer point
+    p0 = lower_points[0,:]
+    # Upper outer point
+    p1 = upper_points[0,:]
+    
+    
+    # Calculate the vector
+    v = p1 - p0
+    tz = -p0[2]/(p1[2]-p0[2])
+    x0 = p0[0] + tz*(p1[0]-p0[0])
+    y0 = p0[1] + tz*(p1[1]-p0[1])
+    
+    trails = np.array([[x0, y0]])
+    
+    return trails
