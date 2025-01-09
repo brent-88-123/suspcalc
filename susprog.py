@@ -36,11 +36,11 @@ def calculate_roll_center(upper, lower, cop):
     lower_normal = get_plane_normal(lower)
 
     # Project arms onto front view (XZ plane)
-    upper_outer_2d = upper[0, [0, 2]]  # [x, z]
-    upper_inner_2d = upper[1, [0, 2]]  # Using front inner point
-    lower_outer_2d = lower[0, [0, 2]]
-    lower_inner_2d = lower[1, [0, 2]]
-    tire_cop_2d = cop[[0, 2]]
+    upper_outer_2d = upper[0, [1,2]]  # [x, z]
+    upper_inner_2d = upper[1, [1,2]]  # Using front inner point
+    lower_outer_2d = lower[0, [1,2]]
+    lower_inner_2d = lower[1, [1,2]]
+    tire_cop_2d = cop[[1, 2]]
 
     # Calculate control arm angles in front view
     def get_arm_angle(outer, inner):
@@ -61,9 +61,7 @@ def calculate_roll_center(upper, lower, cop):
     m_upper, c_upper = line_equation(upper_outer_2d, upper_inner_2d)
     m_lower, c_lower = line_equation(lower_outer_2d, lower_inner_2d)
     
-    ic_x = (c_lower - c_upper) / (m_upper - m_lower)
-    ic_z = m_upper * ic_x + c_upper
-    instant_center_2d = np.array([ic_x, ic_z])
+
 
     # Calculate roll center height
     # RC is where line from IC to CoP intersects vehicle centerline (x=0)
@@ -92,6 +90,46 @@ def calculate_roll_center(upper, lower, cop):
     }
 
     return roll_center, geometry_data
+
+def calculate_rc_simple(upper, lower, cop):
+    """
+    Calculates the roll centre based on 3D geometry:
+    1. Project a-arms to YZ plane (X=0) 
+    2. Find equation of upper & lower lines
+    3. Find SV IC
+    4. Equation of line from tire_cop==>SV IC
+    5. Find z when y=0
+    6. Return rc_z
+    """
+    
+    # Find equation of line in form y = m*x + c
+    def line_equation(p1, p2):
+        """Return slope and intercept of line through two points."""
+        m = (p2[1] - p1[1]) / (p2[0] - p1[0])       # Find slope of line
+        c = p1[1] - m * p1[0]                       # Find intercept of line
+        return m, c
+    
+    # Step 1: Project arms onto front view (XZ plane)
+    upper_outer_2d = upper[0, [1,2]]  # [y, z]
+    upper_inner_2d = upper[1, [1,2]]  # Using front inner point
+    lower_outer_2d = lower[0, [1,2]]
+    lower_inner_2d = lower[1, [1,2]]
+    tire_cop_2d = cop[[1, 2]]
+    
+    # Step 2: Find equation of line in XY plane
+    m_upper, c_upper = line_equation(upper_outer_2d, upper_inner_2d)
+    m_lower, c_lower = line_equation(lower_outer_2d, lower_inner_2d)
+    
+    # Step 3: Find SV IC
+    ic_y = (c_lower - c_upper) / (m_upper - m_lower)
+    ic_z = m_upper * ic_y + c_upper
+    SV_IC = [ic_y, ic_z]
+    
+    # Step 4: Find line of action of force
+    m_load, rc_z = line_equation(tire_cop_2d, SV_IC)
+    output_array = np.array([0,0,rc_z,ic_y,ic_z])
+
+    return output_array
 
 def rotate_points(points, axis_point, rotation_axis, angle, height):
     """
