@@ -1,7 +1,26 @@
 # suspcalc
-vehicle suspension kinematic estimation and force estimation
+Vehicle suspension kinematic estimation.
 
-Basic double a-arm race car kinematic simulator 
-input array of movement or create a space of movement and apply sprung mass & fourth link patterns
+Inputs:
+* Double a-arm suspension joint locations [x,y,z]
+* Static tire centre of pressure (force application point) [x,y,z]
+* Tire force vector
+* Sprung mass movements:
+    * Roll
+    * Jounce
 
-Next step is to mirror points to LHS and recalculate RC geometry for both sides
+Outputs:
+* Link points 
+* Scrub radius
+* Mechanical trail
+* Roll centre (2D-centreline)
+
+Next steps:
+
+* Add reference frame definition
+* Mirror points to LHS and properly estimate RC
+* Calculate KPI/Caster/SAL/ANTI GEO, etc
+* Introduce reaction force estimation:
+    * Tire Fz load reaction
+    * Tire Fy load reaction
+    * Tire Fx load reaction
