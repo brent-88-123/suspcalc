@@ -268,11 +268,58 @@ def trail_calc(upper_points, lower_points, cop):
     
     
     # Calculate the vector
-    v = p1 - p0
     tz = -p0[2]/(p1[2]-p0[2])
     x0 = p0[0] + tz*(p1[0]-p0[0])
     y0 = p0[1] + tz*(p1[1]-p0[1])
     
-    trails = np.array([[x0, y0]])
+    trail = (x0-cop[0])
+    scrub = (y0-cop[1])
+    
+    
+    trails = np.array([[trail, scrub]])
     
     return trails
+
+def suspension_geometry_calc(upper_points, lower_points, cop):
+    """
+    Calculate trail, scrub, kingpin inclination, and camber angle.
+    
+    Args:
+        upper_points: np.array, upper suspension points [outer, inner].
+        lower_points: np.array, lower suspension points [outer, inner].
+        cop: np.array, center of the contact patch (x, y, z).
+    
+    Returns:
+        dict: Dictionary containing trail, scrub, kingpin inclination (degrees), and camber angle (degrees).
+    """
+    # Lower outer point
+    p0 = lower_points[0, :]
+    # Upper outer point
+    p1 = upper_points[0, :]
+    
+    # Calculate the vector for kingpin axis
+    kingpin_vector = p1 - p0
+    
+    # Trail and Scrub
+    tz = -p0[2] / (p1[2] - p0[2])  # Intersection with the ground (z = 0)
+    x0 = p0[0] + tz * (p1[0] - p0[0])
+    y0 = p0[1] + tz * (p1[1] - p0[1])
+    trail = x0 - cop[0]
+    scrub = y0 - cop[1]
+    
+    # Kingpin Inclination (XZ-plane)
+    kpi_vector_xz = np.array([kingpin_vector[0], kingpin_vector[2]])  # Project to XZ-plane
+    kpi_angle = np.arctan2(kpi_vector_xz[0], kpi_vector_xz[1])  # Angle with vertical (z-axis)
+    kpi_angle_deg = np.degrees(kpi_angle)
+    
+    # Camber Angle (YZ-plane)
+    camber_vector_yz = np.array([kingpin_vector[1], kingpin_vector[2]])  # Project to YZ-plane
+    camber_angle = np.arctan2(camber_vector_yz[0], camber_vector_yz[1])  # Angle with vertical (z-axis)
+    camber_angle_deg = np.degrees(camber_angle)
+    
+    return {
+        "trail": trail,
+        "scrub": scrub,
+        "kingpin_inclination_deg": kpi_angle_deg,
+        "camber_angle_deg": camber_angle_deg,
+    }

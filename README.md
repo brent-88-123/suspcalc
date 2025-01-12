@@ -11,15 +11,17 @@ Inputs:
 
 Outputs:
 * Link points 
-* Scrub radius
-* Mechanical trail
 * Roll centre (2D-centreline)
+* KPI
+* Caster
+* Scrub radius
+* Mechancial trail
+
 
 Next steps:
 
 * Add reference frame definition
 * Mirror points to LHS and properly estimate RC
-* Calculate KPI/Caster/SAL/ANTI GEO, etc
 * Introduce reaction force estimation:
     * Tire Fz load reaction
     * Tire Fy load reaction
