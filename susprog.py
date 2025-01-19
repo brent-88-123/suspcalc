@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import minimize
+from scipy.spatial.transform import Rotation as R
 
 def calculate_roll_center(upper, lower, cop):
     """
@@ -131,7 +132,7 @@ def calculate_rc_simple(upper, lower, cop):
 
     return output_array
 
-def rotate_points(points, axis_point, rotation_axis, angle, height):
+def rotate_points_old(points, axis_point, rotation_axis, angle, height):
     """
     Rotate points around a given axis in 3D space.
 
@@ -168,6 +169,35 @@ def rotate_points(points, axis_point, rotation_axis, angle, height):
     modified_points = np.vstack((points[0], rotated_points))
     
     return modified_points
+
+def rotate_points(points, axis_point, rotation_axis, angle):
+    """
+    Rotate points around a given axis in 3D space.
+
+    Parameters:
+        points (np.array): Nx3 array of points to be rotated.
+        axis_point (np.array): A point on the rotation axis (3D).
+        rotation_axis (np.array): Direction vector of the rotation axis (3D).
+        angle (float): Rotation angle in radians.
+
+    Returns:
+        np.array: Rotated points.
+    """   
+# Smoothly adjust heights before rotation
+
+    # Translate points to the axis origin
+    translated_points = points - axis_point
+
+    # Create the rotation object
+    rotation = R.from_rotvec(angle * rotation_axis)
+
+    # Apply the rotation
+    rotated_translated_points = rotation.apply(translated_points)
+
+    # Translate back to the original position
+    rotated_points = rotated_translated_points + axis_point
+
+    return rotated_points
 
 def jounce_innerpoints(points, height):
 
