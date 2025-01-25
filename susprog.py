@@ -353,3 +353,54 @@ def suspension_geometry_calc(upper_points, lower_points, cop):
         "kingpin_inclination_deg": kpi_angle_deg,
         "camber_angle_deg": camber_angle_deg,
     }
+
+def bumpsteer_calc(upper, lower, steer):
+    
+    # Calculate control arm planes normal vectors
+    def get_plane_normal(points):
+        """Calculate normal vector of plane defined by three points."""
+        v1 = points[1] - points[0]
+        v2 = points[2] - points[0]
+        return np.cross(v1, v2)
+    
+    temp = np.vstack((lower[0],upper[0],steer[0]))
+    steer_angle = get_plane_normal(temp)
+
+def bump_steer_calc(upper, lower, tie, previous_angle=None):
+    """
+    Calculate the bump steer angle change for a given suspension iteration.
+    
+    Parameters:
+        outer_point (np.array): Current position of the outer point (3D vector).
+        steering_axis_points (np.array): Two points defining the steering axis (2x3 array).
+        previous_angle (float, optional): The previous steering angle in radians. If None, only returns the current angle.
+
+    Returns:
+        float: The change in steering angle (if previous_angle is provided).
+        float: The current steering angle in radians.
+    """
+    
+    # Define the steering axis direction vector
+    axis_point1 = upper[0,:]
+    axis_point2 = lower[0,:]
+    steering_axis = axis_point2 - axis_point1
+    steering_axis /= np.linalg.norm(steering_axis)  # Normalize the vector
+
+    # Vector from the axis to the outer point
+    vector_to_outer = tie[0,:] - axis_point1
+
+    # Project the outer point vector onto the steering axis (normalized direction)
+    projection = np.dot(vector_to_outer, steering_axis) * steering_axis
+
+    # Perpendicular vector from the projection to the outer point
+    perpendicular_vector = vector_to_outer - projection
+
+    # Calculate the steering angle (angle between perpendicular vector and projection)
+    angle = np.arctan2(
+        np.linalg.norm(np.cross(steering_axis, vector_to_outer)),
+        np.dot(steering_axis, vector_to_outer)
+    )
+    
+    angle = np.rad2deg(angle)
+
+    return angle
