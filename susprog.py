@@ -2,6 +2,112 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation as R
 
+def run_simulation (Upper_a_arm, Lower_a_arm, Tie_rod, Tire_cop, Force_vector, Susprog, Roll_angles, Jounce_displacements, Lower_lengths, Upper_lengths, Tie_length):
+    """
+
+    Args:
+        upper_arm (_type_): _description_
+        lower_arm (_type_): _description_
+        tierod (_type_): _description_
+        tire_COP (_type_): _description_
+        force_Vector (_type_): _description_
+    """
+    import pandas as pd
+    
+    # Columns: [roll_angle (rad), jounce (m), suspension_positions (1x9), rc_x, rc_y, rc_z]
+    results = np.zeros((len(Roll_angles), 37))  # 100 rows, 37 columns
+    #rc, geo_roll_centre = susprog.calculate_roll_center(upper_a_arm, lower_a_arm, tire_cop)
+    rc_data = Susprog.calculate_rc_simple(Upper_a_arm, Lower_a_arm, Tire_cop)
+    rc = rc_data[0:3]
+
+    # Roll axis (example: x-axis)
+    roll_axis = np.array([1, 0, 0])
+    base_Steer = Susprog.bump_steer_calc(Upper_a_arm, Lower_a_arm, Tie_rod, None)
+
+    # Initialize rotated arms as a copy of the original
+    upper_modified = Upper_a_arm.copy()
+    lower_modified = Lower_a_arm.copy()
+    tierod_modified = Tie_rod.copy()
+
+    # Loop through each roll and jounce input
+    for i, (roll_angle, jounce_disp) in enumerate(zip(Roll_angles, Jounce_displacements)):
+        # Step 1: Rotate and jounce the inner points of the arms and tie rod
+        upper_modified = Susprog.rotate_points(Upper_a_arm, rc, roll_axis, roll_angle)
+        upper_modified = Susprog.jounce_innerpoints(upper_modified, jounce_disp)
+
+        lower_modified = Susprog.rotate_points(Lower_a_arm, rc, roll_axis, roll_angle)
+        lower_modified = Susprog.jounce_innerpoints(lower_modified, jounce_disp)
+
+        tierod_modified = Susprog.rotate_points(Tie_rod, rc, roll_axis, roll_angle)
+        tierod_modified = Susprog.jounce_innerpoints(tierod_modified, jounce_disp)
+
+        # Step 3: Update outer points of lower, upper, and tie rod
+        # Lower A-arm
+        points_temp = np.vstack((lower_modified, Tire_cop))
+        lower_modified[0:1] = Susprog.solve_outer_position(points_temp, Lower_lengths)
+        del points_temp
+
+        # Upper A-arm
+        points_temp = np.vstack((upper_modified, lower_modified[0:]))
+        upper_modified[0:1] = Susprog.solve_outer_position(points_temp, Upper_lengths)
+        del points_temp
+
+        # Tie rod
+        points_temp = np.vstack((tierod_modified, upper_modified[0:1], lower_modified[0:1]))
+        tierod_modified[0:1] = Susprog.solve_outer_position(points_temp, Tie_length)
+        del points_temp
+
+
+        # Step 4: Calculate the new roll center
+        rc_data = Susprog.calculate_rc_simple(upper_modified, lower_modified, Tire_cop)
+        rc = rc_data[0:3]
+    
+        # Caclulate the KPI/Caster, trail and scrub
+        steering_data = Susprog.suspension_geometry_calc(upper_modified, lower_modified, Tire_cop)
+        steering_data = [
+            steering_data['trail'],  # trail in x
+            steering_data['scrub'],  # scrub in y
+            steering_data['kingpin_inclination_deg'],      # KPI
+            steering_data['camber_angle_deg'],       # Caster
+        ]
+    
+        # Calculate Bump Steer
+        bump_data = Susprog.bump_steer_calc(upper_modified, lower_modified, tierod_modified, base_Steer)
+
+        forces = Susprog.force_calc(upper_modified,lower_modified,tierod_modified,Force_vector,Tire_cop)
+    
+
+        # Step 5: Store the results
+        results[i, 0] = roll_angle  # Roll angle (in radians)
+        results[i, 1] = jounce_disp  # Jounce displacement
+        results[i, 2:11] = lower_modified.flatten()  # Lower A-arm positions (3x3 -> 1x9)
+        results[i, 11:20] = upper_modified.flatten()  # Upper A-arm positions (3x3 -> 1x9)
+        results[i, 20:25] = rc_data  # Roll center (1x8)
+        results[i, 25:29] = steering_data # Steering axis==> tire cop (1x3)
+        results[i, 29] = bump_data
+        results[i, 30:38] = forces
+
+    del i
+
+    # Convert results to a DataFrame for easier visualization and saving
+    column_names = [
+        "roll_angle", "jounce", 
+        "lower_outer_x", "lower_outer_y", "lower_outer_z", 
+        "lower_inner1_x", "lower_inner1_y", "lower_inner1_z", 
+        "lower_inner2_x", "lower_inner2_y", "lower_inner2_z",
+        "upper_outer_x", "upper_outer_y", "upper_outer_z", 
+        "upper_inner1_x", "upper_inner1_y", "upper_inner1_z", 
+        "upper_inner2_x", "upper_inner2_y", "upper_inner2_z",
+        "rc_x", "rc_y", "rc_z",
+        "ic_y", "ic_z", 
+        "Steering_trail_x", "Scrub_radius_y", "kingpin_inclination_deg", "camber_angle_deg",
+        "Bump_Steer",
+        "Fx (Upper A-arm)", "Fy (Upper A-arm)", "Fx (Lower A-arm)", "Fy (Lower A-arm)", "Fx (Tie Rod)", "Fy (Tie Rod)", "Fz (Lower A-arm)"
+    ]
+    results_df = pd.DataFrame(results, columns=column_names)
+    
+    return results_df
+
 def calculate_rc_simple(upper, lower, cop):
     """
     Calculates the roll centre based on 3D geometry:
