@@ -16,13 +16,10 @@ Outputs:
 * Caster
 * Scrub radius
 * Mechancial trail
+* Forces
 
 
 Next steps:
 
 * Add reference frame definition
 * Mirror points to LHS and properly estimate RC
-* Introduce reaction force estimation:
-    * Tire Fz load reaction
-    * Tire Fy load reaction
-    * Tire Fx load reaction

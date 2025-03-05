@@ -2,96 +2,6 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation as R
 
-def calculate_roll_center(upper, lower, cop):
-    """
-    Calculate the roll center (RC) based on 3D suspension geometry and tire CoP.
-    Assumes suspension symmetry about the vehicle centerline.
-
-    Parameters:
-        upper (np.ndarray): 3x3 matrix of upper control arm pickup points.
-                        [[outer], [inner front], [inner rear]] points.
-        lower (np.ndarray): 3x3 matrix of lower control arm pickup points.
-                    [[outer], [inner front], [inner rear]] points.
-        cop (np.ndarray): 1x3 array for tire center of pressure (CoP).
-
-    Returns:
-        np.ndarray: Roll center coordinates [x, y, z] in the global coordinate system.
-        dict: Additional geometry data including instant centers and angles.
-    """
-    # Input validation
-    if not all(isinstance(x, np.ndarray) for x in [upper, lower, cop]):
-        raise ValueError("Inputs must be numpy arrays")
-    if upper.shape != (3, 3) or lower.shape != (3, 3):
-        raise ValueError("Control arm matrices must be 3x3")
-    if cop.shape != (3,):
-        raise ValueError("CoP must be 1x3 array")
-
-    # Calculate control arm planes normal vectors
-    def get_plane_normal(points):
-        """Calculate normal vector of plane defined by three points."""
-        v1 = points[1] - points[0]
-        v2 = points[2] - points[0]
-        return np.cross(v1, v2)
-
-    upper_normal = get_plane_normal(upper)
-    lower_normal = get_plane_normal(lower)
-
-    # Project arms onto front view (XZ plane)
-    upper_outer_2d = upper[0, [1,2]]  # [x, z]
-    upper_inner_2d = upper[1, [1,2]]  # Using front inner point
-    lower_outer_2d = lower[0, [1,2]]
-    lower_inner_2d = lower[1, [1,2]]
-    tire_cop_2d = cop[[1, 2]]
-
-    # Calculate control arm angles in front view
-    def get_arm_angle(outer, inner):
-        """Calculate arm angle from horizontal in front view."""
-        delta = inner - outer
-        return np.degrees(np.arctan2(delta[1], delta[0]))
-
-    upper_angle = get_arm_angle(upper_outer_2d, upper_inner_2d)
-    lower_angle = get_arm_angle(lower_outer_2d, lower_inner_2d)
-
-    # Find instant center (IC) in front view
-    def line_equation(p1, p2):
-        """Return slope and intercept of line through two points."""
-        m = (p2[1] - p1[1]) / (p2[0] - p1[0])
-        c = p1[1] - m * p1[0]
-        return m, c
-
-    m_upper, c_upper = line_equation(upper_outer_2d, upper_inner_2d)
-    m_lower, c_lower = line_equation(lower_outer_2d, lower_inner_2d)
-    
-
-
-    # Calculate roll center height
-    # RC is where line from IC to CoP intersects vehicle centerline (x=0)
-    m_ic_to_cop = (tire_cop_2d[1] - ic_z) / (tire_cop_2d[0] - ic_x)
-    c_ic_to_cop = ic_z - m_ic_to_cop * ic_x
-    rc_z = c_ic_to_cop  # At x=0
-
-    # Consider 3D effects
-    # Calculate swing arm length (SAL) considering y-axis position
-    sal = np.sqrt(ic_x**2 + (upper[1, 1] - upper[0, 1])**2)  # Using y-distance
-    
-    # Calculate roll center including y-coordinate
-    # Using average y-position of inner pickup points
-    rc_y = (np.mean(upper[:, 1]) + np.mean(lower[:, 1])) / 2
-    
-    roll_center = np.array([0, rc_y, rc_z])
-
-    # Package additional geometry data
-    geometry_data = {
-        'instant_center_2d': instant_center_2d,
-        'swing_arm_length': sal,
-        'upper_arm_angle': upper_angle,
-        'lower_arm_angle': lower_angle,
-        'upper_normal': upper_normal,
-        'lower_normal': lower_normal
-    }
-
-    return roll_center, geometry_data
-
 def calculate_rc_simple(upper, lower, cop):
     """
     Calculates the roll centre based on 3D geometry:
@@ -131,44 +41,6 @@ def calculate_rc_simple(upper, lower, cop):
     output_array = np.array([0,0,rc_z,ic_y,ic_z])
 
     return output_array
-
-def rotate_points_old(points, axis_point, rotation_axis, angle, height):
-    """
-    Rotate points around a given axis in 3D space.
-
-    Parameters:
-        points (np.array): Nx3 array of points to be rotated.
-        axis_point (np.array): A point on the rotation axis (3D).
-        rotation_axis (np.array): Direction vector of the rotation axis (3D).
-        angle (float): Rotation angle in radians.
-
-    Returns:
-        np.array: Rotated points.
-    """
-    
-    points = jounce_innerpoints(points, height)
-    
-    # Normalize the rotation axis
-    rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
-    
-    # Translate points to the rotation axis origin
-    translated_points = points[1:] - axis_point
-    
-    # Compute the rotation matrix using the Rodrigues' rotation formula
-    K = np.array([[0, -rotation_axis[2], rotation_axis[1]],
-                  [rotation_axis[2], 0, -rotation_axis[0]],
-                  [-rotation_axis[1], rotation_axis[0], 0]])
-    
-    I = np.eye(3)
-    R = I + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
-    
-    # Apply rotation and translate back
-    rotated_points = (R @ translated_points.T).T + axis_point
-    
-    # Combine the unrotated first point with the rotated points
-    modified_points = np.vstack((points[0], rotated_points))
-    
-    return modified_points
 
 def rotate_points(points, axis_point, rotation_axis, angle):
     """
@@ -258,35 +130,6 @@ def solve_outer_position(points, target_lengths):
     else:
         raise ValueError("Optimization failed:", result.message)
 
-def rotate_inner_points(points, axis_point, angle_deg):
-    """
-    Rotate points around X-axis through a given axis point.
-    
-    Parameters:
-        points: np.array of shape (N, 3)
-        axis_point: np.array of shape (3,) - point that rotation axis passes through
-        angle_deg: float - rotation angle in degrees
-    """
-    angle = np.radians(angle_deg)
-    
-    # Create basic X-rotation matrix
-    R = np.array([
-        [1, 0, 0],
-        [0, np.cos(angle), -np.sin(angle)],
-        [0, np.sin(angle), np.cos(angle)]
-    ])
-    
-    # Translate points to origin
-    centered_points = points - axis_point
-    
-    # Apply rotation
-    rotated_points = np.dot(centered_points, R.T)
-    
-    # Translate back
-    final_points = rotated_points + axis_point
-    
-    return final_points
-
 def trail_calc(upper_points, lower_points, cop):
     
     # Import the outer joint points of the suspension system
@@ -354,18 +197,6 @@ def suspension_geometry_calc(upper_points, lower_points, cop):
         "camber_angle_deg": camber_angle_deg,
     }
 
-def bumpsteer_calc(upper, lower, steer):
-    
-    # Calculate control arm planes normal vectors
-    def get_plane_normal(points):
-        """Calculate normal vector of plane defined by three points."""
-        v1 = points[1] - points[0]
-        v2 = points[2] - points[0]
-        return np.cross(v1, v2)
-    
-    temp = np.vstack((lower[0],upper[0],steer[0]))
-    steer_angle = get_plane_normal(temp)
-
 def bump_steer_calc(upper, lower, tie, previous_angle=None):
     """
     Calculate the bump steer angle change for a given suspension iteration.
@@ -404,3 +235,62 @@ def bump_steer_calc(upper, lower, tie, previous_angle=None):
     angle = np.rad2deg(angle)
 
     return angle
+
+def force_calc(upper,lower,tie, force, location):
+    """
+    Calculate the force reaction at the outer points in xyz
+    Assumptions:
+    * All joints are revolute
+    * Lower a-arm reacts contact force z
+    * Upper & tie rod only react load in polar form (along their line of action)
+
+    Args:
+        upper (_matrix_): a-arm joint position matrix
+        lower (_matrix_): a-arm joint position matrix
+        tie (_matrix_): tie rod joint position matrix
+        force (_vector_): Force vector
+        location (_vector_): tire force cop location
+    """
+    #Create matrix of outter points
+    outer = np.zeros((3,3))
+    outer[0] = upper[0,:]
+    outer[1] = lower[0,:]
+    outer[2] = tie[0,:]
+    
+    # Moment arms of locations
+    r = outer - location
+    
+    # Force equilibrium equations
+    A = np.array([
+        # Force equilibrium (ΣFx = 0)
+        [1, 0,  1, 0,  1, 0,  0],  # Fx_upper, Fy_upper, Fx_lower, Fy_lower, Fx_tie, Fy_tie, Fz_lower
+        [0, 1,  0, 1,  0, 1,  0],  # Fx_upper, Fy_upper, Fx_lower, Fy_lower, Fx_tie, Fy_tie, Fz_lower
+        [0, 0,  0, 0,  0, 0,  1],  # Only Fz_lower (Z reaction assumed only at lower A-arm)
+        # Moment equilibrium (ΣMx = 0, ΣMy = 0, ΣMz = 0)
+        [0,  r[0,2],  0, r[1,2],  0, r[2,2], -r[1,1]],  # Mx = r × F (y * Fz - z * Fy)
+        [-r[0,2],  0, -r[1,2], 0, -r[2,2], 0,  r[1,0]],  # My = r × F (z * Fx - x * Fz)
+        [r[0,1], -r[0,0],  r[1,1], -r[1,0],  r[2,1], -r[2,0], 0]  # Mz = r × F (x * Fy - y * Fx)
+    ], dtype=np.float64)
+
+    # Right-hand side vector (force & moment equilibrium)
+    b = np.array([force[0], force[1], force[2], 0, 0, 0], dtype=np.float64)
+
+    # Solve the system Ax = b
+    reactions, residuals, rank, s_values = np.linalg.lstsq(A, b, rcond=None)
+    
+    """print("Reaction Forces:")
+    force_labels = [
+        "Fx (Upper A-arm)", 
+        "Fy (Upper A-arm)", 
+        "Fx (Lower A-arm)", 
+        "Fy (Lower A-arm)", 
+        "Fx (Tie Rod)", 
+        "Fy (Tie Rod)", 
+        "Fz (Lower A-arm)"
+    ]
+    
+    for label, value in zip(force_labels, reactions):
+        print(f"{label}: {value}")
+        """
+    
+    return reactions
